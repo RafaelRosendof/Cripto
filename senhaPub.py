@@ -1,4 +1,6 @@
 from bitcoinlib.wallets import Wallet
+import argparse
+from typing import List
 
 '''
 Melhorias a serem implementadas:
@@ -7,24 +9,68 @@ Melhorias a serem implementadas:
     - Interface gráfica com alguma lib do python
 '''
 
+def gerador(
+    seed_frase: str,
+    carteiraName: str,
+    network: str= "bitcoin",
+    wtness_type: str = "segwit",
+    num_add: int = 5
+)-> List[str]:
 
-# INSIRA AS 24  PALAVRAS AQUI EM BAIXO
-seed = ""
+    try:
+        wallet = Wallet.create(
+            carteiraName,
+            keys=seed_frase,
+            network=network,
+            witness_type=wtness_type
+        )
 
-'''
-Caso queira um nome diferente alterar o campo
-Caso queira a seed ou até a chave privada colocar no campo
-Importante, escolher também qual o tipo da rede que voce vai operar segwit, etc...
-'''
+        lista = []
 
-wallet = Wallet.create('nome', keys=seed, network='bitcoin', witness_type='segwit')
+        for i in range(num_add):
+            key = wallet.get_key(i)
+            lista.append(key.address)
 
-# Derive o primeiro endereço de recebimento
-receiving_address = wallet.get_key().address
+        return lista
 
-print("Primeiro endereço de recebimento (SegWit):", receiving_address)
+    except Exception as e:
+        raise Exception(f"Error generating wallet: {str(e)}")
 
-# Opcional: Derivar múltiplos endereços
-for i in range(5):  # Por exemplo, 5 endereços
-    addr = wallet.get_key(i).address
-    print(f"Endereço {i}: {addr}")
+
+def main():
+    parser = argparse.ArgumentParser(description='Generate Bitcoin wallet addresses')
+    parser.add_argument('--seed', type=str, help='Seed phrase for wallet generation')
+    parser.add_argument('--name', type=str, default='default_wallet', help='Wallet name')
+    parser.add_argument('--network', type=str, default='bitcoin', help='Network type')
+    parser.add_argument('--witness-type', type=str, default='segwit',
+                       help='Address type (segwit, legacy)')
+    parser.add_argument('--num-addresses', type=int, default=5,
+                       help='Number of addresses to generate')
+
+    args = parser.parse_args()
+
+    if not args.seed:
+        print("Error: Seed phrase is required")
+        return
+
+    try:
+        addresses = gerador(
+            args.seed,
+            args.name,
+            args.network,
+            args.witness_type,
+            args.num_addresses
+        )
+
+        print(f"\nWallet Name: {args.name}")
+        print(f"Network: {args.network}")
+        print(f"Address Type: {args.witness_type}")
+        print("\nGenerated Addresses:")
+        for i, addr in enumerate(addresses):
+            print(f"Address {i}: {addr}")
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+
+if __name__ == "__main__":
+    main()

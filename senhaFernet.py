@@ -1,8 +1,86 @@
 from cryptography.fernet import Fernet
 import base64
-import getpass
+import qrcode
+from bitcoinlib.wallets import Wallet
 import argparse
+from typing import List
+from mnemonic import Mnemonic
+from eth_account import Account
 
+
+###Parde do etherium 
+
+''' 
+mnemo = Mnemonic("english")
+seed_frase = mnemo.generate(strength=256)
+
+print("AS 24 PALAVRAS: ", seed_frase, "\n\n\n")
+
+Account.enable_unaudited_hdwallet_features()
+conta = Account.create(seed_frase)
+
+print("ENDEREÇO ETHERIUM: ", conta.address, "\n\n")
+
+print("CHAVE PRIVADA: ", conta.key.hex(), "\n\n")
+'''
+
+
+
+### Código QR
+
+def gerador(stringAlvo, output_name):
+    qr = qrcode.QRCode(
+    version=1,
+    error_correction=qrcode.constants.ERROR_CORRECT_L,
+    box_size=10,
+    border=4,
+    )
+
+    qr.add_data(stringAlvo)
+
+    qr.make(fit=True)
+
+    img = qr.make_image(fill="black" , back_colors="white")
+
+    img.save(f"{output_name}.png")
+
+    print("Deu bom ")
+
+
+### Gerador de chaves públicas
+
+def gerador(
+    seed_frase: str,
+    carteiraName: str,
+    network: str= "bitcoin",
+    wtness_type: str = "segwit",
+    num_add: int = 5
+)-> List[str]:
+
+    try:
+        wallet = Wallet.create(
+            carteiraName,
+            keys=seed_frase,
+            network=network,
+            witness_type=wtness_type
+        )
+
+        lista = []
+
+        for i in range(num_add):
+            key = wallet.get_key(i)
+            lista.append(key.address)
+
+        return lista
+
+    except Exception as e:
+        raise Exception(f"Error generating wallet: {str(e)}")
+
+
+
+
+
+### Parte de criptografia 
 
 def gerar_chave(senha: str) -> bytes:
     return base64.urlsafe_b64encode(senha.encode('utf-8').ljust(32)[:32])

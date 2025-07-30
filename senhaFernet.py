@@ -46,7 +46,7 @@ def gerador(stringAlvo, output_name):
 
     print("Deu bom ")
 
-
+ 
 ### Gerador de chaves públicas
 
 def gerador(

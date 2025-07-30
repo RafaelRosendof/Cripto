@@ -1,56 +1,55 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"time"
+
+	"github.com/fernet/fernet-go"
 )
 
-// Etapa 1: Operação matemática (adição modular)
-// Adiciona os bytes da senha aos bytes dos dados, repetindo a senha se necessário.
-func addKey(data []byte, key []byte) []byte {
-	encrypted := make([]byte, len(data))
-	for i := 0; i < len(data); i++ {
-		// A adição de bytes em Go já faz o "wrap-around" (aritmética modular)
-		encrypted[i] = data[i] + key[i%len(key)] // i % len(key) repete a chave
-	}
-	return encrypted
-}
+func gerarChaveCustomizada(senha string) string {
+	keyBytes := []byte(senha)
+	keyLen := len(keyBytes)
 
-// Etapa 2: Shift (rotação circular para a direita)
-func shiftRight(data []byte) []byte {
-	if len(data) == 0 {
-		return data
+	if keyLen < 32 {
+		// Se a senha for menor que 32, preenche com espaços à direita.
+		padding := make([]byte, 32-keyLen)
+		for i := range padding {
+			padding[i] = ' ' // O caractere de espaço
+		}
+		keyBytes = append(keyBytes, padding...)
+	} else if keyLen > 32 {
+		// Se for maior, corta em 32.
+		keyBytes = keyBytes[:32]
 	}
-	// Salva o último elemento
-	last := data[len(data)-1]
-	// Move todos os elementos uma posição para a direita
-	copy(data[1:], data[:len(data)-1])
-	// Coloca o último elemento no início
-	data[0] = last
-	return data
+
+	// Codifica os 32 bytes resultantes para Base64 URL-safe, como no Python.
+	return base64.URLEncoding.EncodeToString(keyBytes)
 }
 
 func main() {
-	words := []string{"year", "toy", "apple"}
-	password := "figas"
+	// O token criptografado que você obteve do Python
+	encryptedToken := "gAAAAABoiThtWaC3it-pIj2ULDI_E7oWXre6Z8D8MV3RNPrVOQVUgrfutRCBy1SX0I2EbUHq_MSUHViWhkimxBebd5r0Kgn9rmut_PpgtmFVO9hFCkxjLOkay0iA8U1dVtYQtPvMGHBD7Nn42vrIIA6mSSH6A9lgjfQTVt8i66E5MdXWjF0OT_-33tCNBP3dK6_opHU_cQR3-tJze7kz4Gqvq32HEVPGyHaW9FRA7XxF9CtgZCoKTzjZEvox6PTyWOcQqXvAjHpVpkSfLqEwDlxQkJr-4PCaIw=="
 
-	// Converte a senha para bytes uma vez
-	keyBytes := []byte(password)
+	// A senha original
+	password := "rafinha19"
 
-	fmt.Printf("Senha: %s -> Bytes: %v\n\n", password, keyBytes)
+	// 1. Gera a chave usando a mesma lógica customizada do Python
+	keyString := gerarChaveCustomizada(password)
 
-	for _, word := range words {
-		fmt.Printf("--- Processando Palavra: %s ---\n", word)
-		
-		// Converte a palavra para bytes
-		dataBytes := []byte(word)
-		fmt.Printf("Original:\t%s -> %v\n", word, dataBytes)
+	// fmt.Printf("Chave Gerada: %s\n", keyString) // Descomente para ver a chave
 
-		// Etapa 1: Adicionar a chave
-		added := addKey(dataBytes, keyBytes)
-		fmt.Printf("Após Adição:\t%v\n", added)
+	// 2. Decodifica a chave Base64 para usar com a biblioteca Fernet
+	keys := fernet.MustDecodeKeys(keyString)
 
-		// Etapa 2: Fazer o shift
-		shifted := shiftRight(added)
-		fmt.Printf("Após Shift:\t%v -> %s (tentativa de decodificar)\n\n", shifted, string(shifted))
+	// 3. Tenta descriptografar a mensagem usando a chave correta
+	decryptedMsg := fernet.VerifyAndDecrypt([]byte(encryptedToken), 365*24*time.Hour, keys)
+
+	if decryptedMsg == nil {
+		fmt.Println("Erro: Falha ao verificar ou descriptografar o token. A chave pode estar errada ou o token corrompido.")
+	} else {
+		fmt.Println("SUCESSO!")
+		fmt.Printf("Texto original: %s\n", decryptedMsg)
 	}
 }

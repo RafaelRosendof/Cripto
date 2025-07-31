@@ -1,55 +1,72 @@
 package main
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"time"
 
-	"github.com/fernet/fernet-go"
+	"golang.org/x/crypto/pbkdf2"
 )
 
-func gerarChaveCustomizada(senha string) string {
-	keyBytes := []byte(senha)
-	keyLen := len(keyBytes)
+const (
+	ITERATION_COUNT    = 19052004
+	SALT_SIZE_BYTES    = 16
+	IV_SIZE_BYTES      = 12
+	AES_KEY_SIZE_BYTES = 32 // 256 bits
+)
 
-	if keyLen < 32 {
-		// Se a senha for menor que 32, preenche com espaços à direita.
-		padding := make([]byte, 32-keyLen)
-		for i := range padding {
-			padding[i] = ' ' // O caractere de espaço
-		}
-		keyBytes = append(keyBytes, padding...)
-	} else if keyLen > 32 {
-		// Se for maior, corta em 32.
-		keyBytes = keyBytes[:32]
+func decrypt(base64Payload string, password string) (string, error) {
+	// 1. Decode the Base64 payload
+	decodedPayload, err := base64.StdEncoding.DecodeString(base64Payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 
-	// Codifica os 32 bytes resultantes para Base64 URL-safe, como no Python.
-	return base64.URLEncoding.EncodeToString(keyBytes)
-}
+	// 2. Extract salt, IV, and ciphertext from the combined payload
+	if len(decodedPayload) < SALT_SIZE_BYTES+IV_SIZE_BYTES {
+		return "", fmt.Errorf("payload is too short")
+	}
+	salt := decodedPayload[:SALT_SIZE_BYTES]
+	iv := decodedPayload[SALT_SIZE_BYTES : SALT_SIZE_BYTES+IV_SIZE_BYTES]
+	ciphertext := decodedPayload[SALT_SIZE_BYTES+IV_SIZE_BYTES:]
 
+	// 3. Re-derive the key using PBKDF2 to match the Java implementation
+	key := pbkdf2.Key([]byte(password), salt, ITERATION_COUNT, AES_KEY_SIZE_BYTES, sha256.New)
+
+	// 4. Create the AES cipher block
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// 5. Create GCM mode
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// 6. Decrypt and authenticate the data
+	plaintext, err := gcm.Open(nil, iv, ciphertext, nil)
+	if err != nil {
+		// This is where the "message authentication failed" error occurs
+		return "", fmt.Errorf("failed to decrypt: %w", err)
+	}
+
+	return string(plaintext), nil
+}
 func main() {
 	// O token criptografado que você obteve do Python
-	encryptedToken := "gAAAAABoiThtWaC3it-pIj2ULDI_E7oWXre6Z8D8MV3RNPrVOQVUgrfutRCBy1SX0I2EbUHq_MSUHViWhkimxBebd5r0Kgn9rmut_PpgtmFVO9hFCkxjLOkay0iA8U1dVtYQtPvMGHBD7Nn42vrIIA6mSSH6A9lgjfQTVt8i66E5MdXWjF0OT_-33tCNBP3dK6_opHU_cQR3-tJze7kz4Gqvq32HEVPGyHaW9FRA7XxF9CtgZCoKTzjZEvox6PTyWOcQqXvAjHpVpkSfLqEwDlxQkJr-4PCaIw=="
+	encryptedToken := "ulqPPpqKNjh1bOBm8fz8aSdNLje3yG58v6wLGcJdKYpBHwftMnGpDhHnPfptzVoaGLF0zUdgcHO93FnS1FnSKCA15RCfwDKwKKLOap+Z9JxBdnTH9ERT2rNPzLKJtc+Ry1RVi4NS2ZNGMiem9DX/TvfwVaxkXRX/hO31V0+DRxhLcuFdIUJnuAvrrfls+f2LcPi9brg72ikh/a+c8bTIlDdfj5euvg66dmxolxSVVadEHVjXTF4jqUHzllHh5A=="
 
-	// A senha original
 	password := "rafinha19"
 
-	// 1. Gera a chave usando a mesma lógica customizada do Python
-	keyString := gerarChaveCustomizada(password)
-
-	// fmt.Printf("Chave Gerada: %s\n", keyString) // Descomente para ver a chave
-
-	// 2. Decodifica a chave Base64 para usar com a biblioteca Fernet
-	keys := fernet.MustDecodeKeys(keyString)
-
-	// 3. Tenta descriptografar a mensagem usando a chave correta
-	decryptedMsg := fernet.VerifyAndDecrypt([]byte(encryptedToken), 365*24*time.Hour, keys)
-
-	if decryptedMsg == nil {
-		fmt.Println("Erro: Falha ao verificar ou descriptografar o token. A chave pode estar errada ou o token corrompido.")
-	} else {
-		fmt.Println("SUCESSO!")
-		fmt.Printf("Texto original: %s\n", decryptedMsg)
+	decryptedToken, err := decrypt(encryptedToken, password)
+	if err != nil {
+		fmt.Println("Error decrypting token:", err)
+		return
 	}
+	fmt.Println("Decrypted token:", decryptedToken)
+
 }

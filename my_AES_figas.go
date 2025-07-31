@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -17,8 +18,48 @@ const (
 	AES_KEY_SIZE_BYTES = 32 // 256 bits
 )
 
+func encrypt(plaintext string, password string) (string, error) {
+
+	// 1. Generate a random salt
+	salt := make([]byte, SALT_SIZE_BYTES)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("failed to generate salt: %w", err)
+	}
+
+	// 2. Derive the key using PBKDF2
+	key := pbkdf2.Key([]byte(password), salt, ITERATION_COUNT, AES_KEY_SIZE_BYTES, sha256.New)
+
+	// 3. Generate a random IV
+	iv := make([]byte, IV_SIZE_BYTES)
+	if _, err := rand.Read(iv); err != nil {
+		return "", fmt.Errorf("failed to generate IV: %w", err)
+	}
+
+	// 4. Create the AES cipher block
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	// 5. Create GCM mode
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	// 6. Encrypt and authenticate the data
+	ciphertext := gcm.Seal(nil, iv, []byte(plaintext), nil)
+
+	// 7. Combine salt, IV, and ciphertext into one payload
+	payload := append(salt, iv...)
+	payload = append(payload, ciphertext...)
+
+	// 8. Encode the payload in base64
+	return base64.StdEncoding.EncodeToString(payload), nil
+}
+
 func decrypt(base64Payload string, password string) (string, error) {
-	// 1. Decode the Base64 payload
+
 	decodedPayload, err := base64.StdEncoding.DecodeString(base64Payload)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
@@ -58,7 +99,7 @@ func decrypt(base64Payload string, password string) (string, error) {
 }
 func main() {
 	// O token criptografado que você obteve do Python
-	encryptedToken := "ulqPPpqKNjh1bOBm8fz8aSdNLje3yG58v6wLGcJdKYpBHwftMnGpDhHnPfptzVoaGLF0zUdgcHO93FnS1FnSKCA15RCfwDKwKKLOap+Z9JxBdnTH9ERT2rNPzLKJtc+Ry1RVi4NS2ZNGMiem9DX/TvfwVaxkXRX/hO31V0+DRxhLcuFdIUJnuAvrrfls+f2LcPi9brg72ikh/a+c8bTIlDdfj5euvg66dmxolxSVVadEHVjXTF4jqUHzllHh5A=="
+	encryptedToken := "eaViwLOf5srpRZJSXgC4mdugj+RLpbi/R6h+AlFiQrTS6q+kyAc+7Wi7jHEDTcj9PKJXe9MTyrZJ8tPKO69Kc3SEkLPzPEW2Ypfh8atSN+e+E1hzEqSYPw4NaDXkW+2eWsrsd5tuBlDv+LflaWJ7yXSvIB/s5T0YNXLit7t3XcSZL8yf7n06JJ2iviCAyvplrIXbh+ckTcKnbniutuGK4xp6VlWh9W8xCSPrCabQE7nkxX97EULV/sntWFDTVw=="
 
 	password := "rafinha19"
 
